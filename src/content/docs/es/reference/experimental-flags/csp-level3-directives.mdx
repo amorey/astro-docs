@@ -1,0 +1,177 @@
+---
+title: Directivas CSP Level 3 experimentales
+sidebar:
+  label: Directivas CSP Level 3
+i18nReady: true
+---
+
+import Since from '~/components/Since.astro'
+
+<p>
+
+**Tipo:** `boolean`<br />
+**Por defecto:** `false`<br />
+<Since v="6.1.6" />
+</p>
+
+Esta característica experimental habilita el soporte para las directivas granulares de [CSP Level 3](https://www.w3.org/TR/CSP3/): `script-src-elem`, `script-src-attr`, `style-src-elem` y `style-src-attr`.
+
+Estas directivas te permiten aplicar políticas de seguridad de contenido (Content Security Policies) separadas a los elementos `<script>` y `<style>` en línea frente a los atributos de controladores de eventos (por ejemplo, `onclick`) y el atributo `style`, proporcionándote un control más detallado que las directivas base `script-src` y `style-src` por sí solas.
+
+Para habilitar esta característica, establece `experimental.cspLevel3` a `true` en tu configuración de Astro junto con una configuración de [`security.csp`](/es/reference/configuration-reference/#securitycsp):
+
+```js title="astro.config.mjs" ins={5}
+import { defineConfig } from "astro/config"
+
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: true,
+  },
+})
+```
+
+## Uso
+
+Con CSP Level 3 habilitado, puedes configurar las nuevas opciones `scriptElemDirective` y `styleElemDirective` en tu configuración de [`security.csp`](/es/reference/configuration-reference/#securitycsp), y agregar los valores correspondientes de `script-src-attr` y `style-src-attr` a través del array existente de [`directives`](/es/reference/configuration-reference/#securitycspdirectives):
+
+```js title="astro.config.mjs"
+import { defineConfig } from "astro/config"
+
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: {
+      scriptElemDirective: {
+        hashes: ['sha256-abc123'],
+        resources: ['https://scripts.cdn.example.com/'],
+      },
+      styleElemDirective: {
+        hashes: ['sha256-def456'],
+        resources: ['https://styles.cdn.example.com/'],
+      },
+      directives: [
+        "script-src-attr 'none'",
+        "style-src-attr 'unsafe-inline'",
+      ],
+    },
+  },
+})
+```
+
+También puedes inyectar recursos y hashes de Level 3 en tiempo de ejecución a través de `Astro.csp`:
+
+```astro title="src/pages/index.astro"
+---
+Astro.csp.insertScriptElemResource('https://scripts.cdn.example.com/');
+Astro.csp.insertStyleElemHash('sha256-abc123');
+---
+
+<html>
+  <head><title>My Page</title></head>
+  <body>
+    <h1>Hello</h1>
+  </body>
+</html>
+```
+
+## Configuración
+
+### `scriptElemDirective`
+
+**Tipo:** `{ hashes?: string[], resources?: string[] }`<br />
+
+Un objeto de configuración para la directiva `script-src-elem`. Esto controla qué elementos `<script>` en línea tienen permitido ejecutarse.
+
+#### `scriptElemDirective.hashes`
+
+**Tipo:** `string[]`<br />
+**Por defecto:** `[]`
+
+Un array de hashes CSP (por ejemplo, `sha256-...`, `sha384-...`, `sha512-...`) para agregar a la directiva `script-src-elem`. Estos hashes autorizan contenido específico de scripts en línea.
+
+#### `scriptElemDirective.resources`
+
+**Tipo:** `string[]`<br />
+**Por defecto:** `[]`
+
+Un array de URLs de origen permitidas para la directiva `script-src-elem`.
+
+### `styleElemDirective`
+
+**Tipo:** `{ hashes?: string[], resources?: string[] }`<br />
+
+Un objeto de configuración para la directiva `style-src-elem`. Esto controla qué elementos `<style>` en línea están permitidos.
+
+#### `styleElemDirective.hashes`
+
+**Tipo:** `string[]`<br />
+**Por defecto:** `[]`
+
+Un array de hashes CSP para agregar a la directiva `style-src-elem`.
+
+#### `styleElemDirective.resources`
+
+**Tipo:** `string[]`<br />
+**Por defecto:** `[]`
+
+Un array de URLs de origen permitidas para la directiva `style-src-elem`.
+
+### Directivas de atributos
+
+Las directivas `script-src-attr` y `style-src-attr` se pueden establecer usando el array existente de [`directives`](/es/reference/configuration-reference/#securitycspdirectives):
+
+- `script-src-attr` controla los atributos de controladores de eventos como `onclick`, `onload`, etc.
+- `style-src-attr` controla el atributo `style` en los elementos HTML.
+
+```js title="astro.config.mjs"
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: {
+      directives: [
+        "script-src-attr 'none'",
+        "style-src-attr 'unsafe-inline'",
+      ],
+    },
+  },
+})
+```
+
+## API en tiempo de ejecución
+
+Cuando `experimental.cspLevel3` está habilitado, cuatro métodos adicionales están disponibles en el objeto `Astro.csp`:
+
+- `insertScriptElemResource(resource)` — agrega una URL de origen a la directiva `script-src-elem`
+- `insertScriptElemHash(hash)` — agrega un hash a la directiva `script-src-elem`
+- `insertStyleElemResource(resource)` — agrega una URL de origen a la directiva `style-src-elem`
+- `insertStyleElemHash(hash)` — agrega un hash a la directiva `style-src-elem`
+
+Estos métodos también están disponibles en el objeto `context.csp` en el [middleware](/es/guides/middleware/):
+
+```js title="src/middleware.ts"
+export function onRequest(context, next) {
+  context.csp.insertScriptElemResource('https://scripts.cdn.example.com/');
+  return next();
+}
+```
+
+## Cómo funciona
+
+Cuando las directivas CSP Level 3 están habilitadas, Astro agrega las directivas `script-src-elem` y `style-src-elem` a la etiqueta `<meta>` de CSP junto con las directivas existentes `script-src` y `style-src`.
+
+Los hashes generados automáticamente de `script-src` y `style-src` se heredan automáticamente en `script-src-elem` y `style-src-elem` cuando has configurado valores de hash o recursos para la directiva Level 3 correspondiente. Esto significa que no necesitas duplicar tus hashes manualmente.
+
+Las directivas `script-src-attr` y `style-src-attr` no se completan automáticamente y deben configurarse explícitamente a través del array `directives`.
+
+## Lectura adicional
+
+- [Referencia del encabezado CSP en MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy)
+- [Especificación W3C CSP Level 3](https://www.w3.org/TR/CSP3/)
+- [Referencia de configuración CSP de Astro](/es/reference/configuration-reference/#securitycsp)

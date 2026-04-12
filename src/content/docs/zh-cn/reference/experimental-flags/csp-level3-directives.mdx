@@ -1,0 +1,177 @@
+---
+title: 实验性 CSP Level 3 指令
+sidebar:
+  label: CSP Level 3 指令
+i18nReady: true
+---
+
+import Since from '~/components/Since.astro'
+
+<p>
+
+**类型：** `boolean`<br />
+**默认值：** `false`<br />
+<Since v="6.1.6" />
+</p>
+
+此实验性功能启用对 [CSP Level 3](https://www.w3.org/TR/CSP3/) 细粒度指令的支持：`script-src-elem`、`script-src-attr`、`style-src-elem` 和 `style-src-attr`。
+
+这些指令允许你对内联 `<script>` 和 `<style>` 元素与事件处理属性（如 `onclick`）以及 `style` 属性分别应用不同的内容安全策略，从而提供比基础的 `script-src` 和 `style-src` 指令更精细的控制。
+
+要启用此功能，请在 Astro 配置中将 `experimental.cspLevel3` 设置为 `true`，并配合 [`security.csp`](/zh-cn/reference/configuration-reference/#securitycsp) 配置：
+
+```js title="astro.config.mjs" ins={5}
+import { defineConfig } from "astro/config"
+
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: true,
+  },
+})
+```
+
+## 用法
+
+启用 CSP Level 3 后，你可以在 [`security.csp`](/zh-cn/reference/configuration-reference/#securitycsp) 配置中设置新的 `scriptElemDirective` 和 `styleElemDirective` 选项，并通过现有的 [`directives`](/zh-cn/reference/configuration-reference/#securitycspdirectives) 数组添加相应的 `script-src-attr` 和 `style-src-attr` 值：
+
+```js title="astro.config.mjs"
+import { defineConfig } from "astro/config"
+
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: {
+      scriptElemDirective: {
+        hashes: ['sha256-abc123'],
+        resources: ['https://scripts.cdn.example.com/'],
+      },
+      styleElemDirective: {
+        hashes: ['sha256-def456'],
+        resources: ['https://styles.cdn.example.com/'],
+      },
+      directives: [
+        "script-src-attr 'none'",
+        "style-src-attr 'unsafe-inline'",
+      ],
+    },
+  },
+})
+```
+
+你也可以在运行时通过 `Astro.csp` 注入 Level 3 资源和哈希值：
+
+```astro title="src/pages/index.astro"
+---
+Astro.csp.insertScriptElemResource('https://scripts.cdn.example.com/');
+Astro.csp.insertStyleElemHash('sha256-abc123');
+---
+
+<html>
+  <head><title>My Page</title></head>
+  <body>
+    <h1>Hello</h1>
+  </body>
+</html>
+```
+
+## 配置
+
+### `scriptElemDirective`
+
+**类型：** `{ hashes?: string[], resources?: string[] }`<br />
+
+`script-src-elem` 指令的配置对象。用于控制允许执行哪些内联 `<script>` 元素。
+
+#### `scriptElemDirective.hashes`
+
+**类型：** `string[]`<br />
+**默认值：** `[]`
+
+要添加到 `script-src-elem` 指令的 CSP 哈希值数组（如 `sha256-...`、`sha384-...`、`sha512-...`）。这些哈希值用于授权特定的内联脚本内容。
+
+#### `scriptElemDirective.resources`
+
+**类型：** `string[]`<br />
+**默认值：** `[]`
+
+`script-src-elem` 指令允许的源 URL 数组。
+
+### `styleElemDirective`
+
+**类型：** `{ hashes?: string[], resources?: string[] }`<br />
+
+`style-src-elem` 指令的配置对象。用于控制允许哪些内联 `<style>` 元素。
+
+#### `styleElemDirective.hashes`
+
+**类型：** `string[]`<br />
+**默认值：** `[]`
+
+要添加到 `style-src-elem` 指令的 CSP 哈希值数组。
+
+#### `styleElemDirective.resources`
+
+**类型：** `string[]`<br />
+**默认值：** `[]`
+
+`style-src-elem` 指令允许的源 URL 数组。
+
+### 属性指令
+
+`script-src-attr` 和 `style-src-attr` 指令可以通过现有的 [`directives`](/zh-cn/reference/configuration-reference/#securitycspdirectives) 数组进行设置：
+
+- `script-src-attr` 控制事件处理属性，如 `onclick`、`onload` 等。
+- `style-src-attr` 控制 HTML 元素上的 `style` 属性。
+
+```js title="astro.config.mjs"
+export default defineConfig({
+  experimental: {
+    cspLevel3: true,
+  },
+  security: {
+    csp: {
+      directives: [
+        "script-src-attr 'none'",
+        "style-src-attr 'unsafe-inline'",
+      ],
+    },
+  },
+})
+```
+
+## 运行时 API
+
+当 `experimental.cspLevel3` 启用时，`Astro.csp` 对象上将提供四个额外的方法：
+
+- `insertScriptElemResource(resource)` — 向 `script-src-elem` 指令添加一个源 URL
+- `insertScriptElemHash(hash)` — 向 `script-src-elem` 指令添加一个哈希值
+- `insertStyleElemResource(resource)` — 向 `style-src-elem` 指令添加一个源 URL
+- `insertStyleElemHash(hash)` — 向 `style-src-elem` 指令添加一个哈希值
+
+这些方法也可以在[中间件](/zh-cn/guides/middleware/)中通过 `context.csp` 对象使用：
+
+```js title="src/middleware.ts"
+export function onRequest(context, next) {
+  context.csp.insertScriptElemResource('https://scripts.cdn.example.com/');
+  return next();
+}
+```
+
+## 工作原理
+
+当启用 CSP Level 3 指令时，Astro 会在 CSP `<meta>` 标签中将 `script-src-elem` 和 `style-src-elem` 指令与现有的 `script-src` 和 `style-src` 指令一起添加。
+
+当你为相应的 Level 3 指令配置了哈希值或资源值时，`script-src` 和 `style-src` 自动生成的哈希值会自动继承到 `script-src-elem` 和 `style-src-elem` 中。这意味着你无需手动重复添加哈希值。
+
+`script-src-attr` 和 `style-src-attr` 指令不会自动填充，必须通过 `directives` 数组显式配置。
+
+## 延伸阅读
+
+- [MDN 上的 CSP 头部参考](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy)
+- [W3C CSP Level 3 规范](https://www.w3.org/TR/CSP3/)
+- [Astro CSP 配置参考](/zh-cn/reference/configuration-reference/#securitycsp)
